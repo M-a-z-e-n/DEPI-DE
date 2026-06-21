@@ -1,0 +1,66 @@
+.stApp {
+    background:
+    radial-gradient(circle at top, rgba(40,40,90,0.8), transparent 40%),
+    linear-gradient(180deg, #050816 0%, #0b1026 50%, #02030a 100%);
+    color: white;
+}
+
+
+/* Stars */
+.stApp::before {
+    content: "";
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    background-image:
+    radial-gradient(white 1px, transparent 1px),
+    radial-gradient(#38bdf8 1px, transparent 1px);
+
+    background-size: 80px 80px, 130px 130px;
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+
+/* Title */
+h1 {
+    text-align: center;
+    color: #7dd3fc;
+    font-size: 45px;
+    text-shadow: 0 0 20px #38bdf8;
+}
+
+
+/* Inputs */
+div[data-baseweb="input"] input {
+
+    background-color: #111827;
+    color: white;
+    border: 1px solid #38bdf8;
+    border-radius: 12px;
+}
+
+
+/* Button */
+
+.stButton button {
+
+    width:100%;
+    background: linear-gradient(90deg,#2563eb,#06b6d4);
+
+    color:white;
+    font-size:20px;
+
+    border-radius:25px;
+    padding:12px;
+
+    box-shadow:0 0 20px #06b6d4;
+
+}
+
+
+.stButton button:hover {
+
+    transform:scale(1.05);
+
+}
