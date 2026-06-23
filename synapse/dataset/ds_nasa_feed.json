@@ -1,0 +1,19 @@
+{
+	"name": "ds_nasa_feed",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_nasa_api",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "RestResource",
+		"typeProperties": {
+			"relativeUrl": {
+				"value": "/neo/rest/v1/feed?start_date=@{variables('RunDate')}&end_date=@{variables('RunDate')}&api_key=@{activity('Get NASA API Key').output.value}",
+				"type": "Expression"
+			}
+		},
+		"schema": []
+	},
+	"type": "Microsoft.Synapse/workspaces/datasets"
+}

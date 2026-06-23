@@ -1,0 +1,17 @@
+{
+	"name": "SQL script 2",
+	"properties": {
+		"content": {
+			"query": "SELECT TOP 10 *\nFROM gold.hazardous_asteroids\nORDER BY close_approach_date DESC;\n\nSELECT TOP 10 *\nFROM gold.monthly_neo_summary\nORDER BY approach_year DESC, approach_month DESC;\n\nSELECT COUNT(*) AS total_rows FROM silver.neo_silver;\n\nSELECT COUNT(*) AS total_rows FROM gold.hazardous_asteroids;\n\nSELECT COUNT(*) AS total_rows FROM gold.monthly_neo_summary;",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "cosmictracker_dw",
+				"poolName": "Built-in"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

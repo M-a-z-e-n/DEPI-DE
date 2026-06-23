@@ -1,0 +1,25 @@
+{
+	"name": "Daily Trigger",
+	"properties": {
+		"annotations": [],
+		"runtimeState": "Started",
+		"pipelines": [
+			{
+				"pipelineReference": {
+					"referenceName": "pl_cosmictracker_medallion",
+					"type": "PipelineReference"
+				}
+			}
+		],
+		"type": "ScheduleTrigger",
+		"typeProperties": {
+			"recurrence": {
+				"frequency": "Day",
+				"interval": 1,
+				"startTime": "2026-06-22T02:19:00",
+				"endTime": "2026-08-01T23:19:00",
+				"timeZone": "Egypt Standard Time"
+			}
+		}
+	}
+}

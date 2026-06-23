@@ -1,0 +1,17 @@
+{
+	"name": "Gold Layer",
+	"properties": {
+		"content": {
+			"query": "IF OBJECT_ID('gold.monthly_neo_summary') IS NOT NULL\n    DROP EXTERNAL TABLE gold.monthly_neo_summary;\n\nCREATE EXTERNAL TABLE gold.monthly_neo_summary\nWITH (\n    LOCATION = 'gold/monthly_neo_summary/',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = parquet_format\n) AS\nSELECT\n    YEAR(close_approach_date)  AS approach_year,\n    MONTH(close_approach_date) AS approach_month,\n    COUNT(DISTINCT neo_id)     AS unique_asteroids,\n    COUNT(*)                   AS total_approaches,\n    SUM(CASE WHEN is_potentially_hazardous = 1 THEN 1 ELSE 0 END) AS hazardous_approaches,\n    AVG(estimated_diameter_avg_km)   AS avg_diameter_km,\n    MIN(miss_distance_lunar)         AS closest_approach_lunar_distance,\n    AVG(relative_velocity_kph)       AS avg_velocity_kph\nFROM silver.neo_silver\nGROUP BY YEAR(close_approach_date), MONTH(close_approach_date);\n\nSELECT TOP 10 * FROM gold.monthly_neo_summary;\n\n\n----- \n\n\nIF OBJECT_ID('gold.hazardous_asteroids') IS NOT NULL\n    DROP EXTERNAL TABLE gold.hazardous_asteroids;\n\nCREATE EXTERNAL TABLE gold.hazardous_asteroids\nWITH (\n    LOCATION = 'gold/hazardous_asteroids/',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = parquet_format\n) AS\nSELECT\n    neo_id,\n    name,\n    close_approach_date,\n    estimated_diameter_avg_km,\n    miss_distance_lunar,\n    miss_distance_km,\n    relative_velocity_kph,\n    proximity_category,\n    orbiting_body\nFROM silver.neo_silver\nWHERE is_potentially_hazardous = 1\nORDER BY close_approach_date DESC;\n\nSELECT TOP 10 * FROM gold.hazardous_asteroids;",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "cosmictracker_dw",
+				"poolName": "Built-in"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

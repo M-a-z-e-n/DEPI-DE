@@ -1,0 +1,17 @@
+{
+	"name": "Create Database",
+	"properties": {
+		"content": {
+			"query": "CREATE DATABASE cosmictracker_dw;\nGO\n\n---\n\nCREATE SCHEMA source;\nGO\nCREATE SCHEMA bronze;\nGO\nCREATE SCHEMA silver;\nGO\nCREATE SCHEMA gold;\nGO\n\n--- \nCREATE MASTER KEY\nENCRYPTION BY PASSWORD = 'StrongPassword@12345';\nGO\n\nCREATE DATABASE SCOPED CREDENTIAL WorkspaceIdentity\nWITH IDENTITY = 'Managed Identity';\nGO\n\n\nCREATE EXTERNAL DATA SOURCE cosmictracker_storage\nWITH (\n    LOCATION = 'https://neotracker.dfs.core.windows.net/neotracker',\n    CREDENTIAL = WorkspaceIdentity\n);\nGO\n\n--- \n\nCREATE EXTERNAL FILE FORMAT csv_format\nWITH (\n    FORMAT_TYPE = DELIMITEDTEXT,\n    FORMAT_OPTIONS (\n        FIELD_TERMINATOR = ',',\n        FIRST_ROW = 2,\n        USE_TYPE_DEFAULT = FALSE\n    )\n);\nGO\n\nCREATE EXTERNAL FILE FORMAT parquet_format\nWITH (\n    FORMAT_TYPE = PARQUET\n);\nGO\n\n--- \n\nCREATE EXTERNAL TABLE source.neo_raw (\n    [date]                       VARCHAR(20),\n    neo_id                       VARCHAR(50),\n    neo_reference_id             VARCHAR(50),\n    name                         VARCHAR(200),\n    absolute_magnitude_h         VARCHAR(50),\n    estimated_diameter_min_km    VARCHAR(50),\n    estimated_diameter_max_km    VARCHAR(50),\n    is_potentially_hazardous     VARCHAR(10),\n    is_sentry_object             VARCHAR(10),\n    close_approach_date          VARCHAR(20),\n    close_approach_date_full     VARCHAR(50),\n    relative_velocity_kph        VARCHAR(50),\n    relative_velocity_kps        VARCHAR(50),\n    miss_distance_km             VARCHAR(50),\n    miss_distance_lunar          VARCHAR(50),\n    miss_distance_au             VARCHAR(50),\n    orbiting_body                VARCHAR(50),\n    nasa_jpl_url                 VARCHAR(300)\n)\nWITH (\n    LOCATION = 'source/neo_dataset.csv',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = csv_format\n);\nGO\n\n--- \nSELECT TOP 10 * FROM OPENROWSET( BULK 'source/neo_dataset.csv', DATA_SOURCE = 'cosmictracker_storage', FORMAT = 'CSV', PARSER_VERSION = '2.0', HEADER_ROW = TRUE ) AS rows;\n\nSELECT TOP 10 * FROM source.neo_raw;\n---\n\n",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "cosmictracker_dw",
+				"poolName": "Built-in"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

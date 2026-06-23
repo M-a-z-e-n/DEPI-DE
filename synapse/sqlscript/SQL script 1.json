@@ -1,0 +1,17 @@
+{
+	"name": "SQL script 1",
+	"properties": {
+		"content": {
+			"query": "CREATE USER [synps-ws-neo-tracker] FROM EXTERNAL PROVIDER;\nGO\n\nALTER ROLE db_datareader ADD MEMBER [synps-ws-neo-tracker];\nGO\n\nALTER ROLE db_datawriter ADD MEMBER [synps-ws-neo-tracker];\nGO\n\n------ \n\nCREATE USER [synps-ws-neo-tracker] FROM EXTERNAL PROVIDER;\nGO\n\nALTER ROLE db_owner ADD MEMBER [synps-ws-neo-tracker];\nGO\n\n---\n\nSELECT name, type_desc, authentication_type_desc\nFROM sys.database_principals\nWHERE name = 'synps-ws-neo-tracker';\n\n\nSELECT TOP 5 *\nFROM OPENROWSET(\n    BULK 'source/daily/neo_2026-06-21.json',\n    DATA_SOURCE = 'cosmictracker_storage',\n    SINGLE_CLOB\n) AS doc;\n\nSELECT name, location FROM sys.external_data_sources;\n\nSELECT TOP 1 BulkColumn\nFROM OPENROWSET(\n    BULK 'source/daily/neo_2026-06-20.json',\n    DATA_SOURCE = 'cosmictracker_storage',\n    SINGLE_CLOB\n) AS doc;\n\nSELECT name, location\nFROM sys.external_data_sources;\n\nSELECT *\nFROM sys.database_scoped_credentials;\n\nSELECT *\nFROM OPENROWSET(\n    BULK 'source/daily/*.json',\n    DATA_SOURCE = 'cosmictracker_storage',\n    FORMAT = 'CSV',\n    FIELDTERMINATOR = '0x0b',\n    FIELDQUOTE = '0x0b'\n)\nWITH (\n    jsonContent VARCHAR(MAX)\n) AS rows;\n\n\nSELECT TOP 1 LEFT(jsonContent, 500)\nFROM OPENROWSET(\n    BULK 'source/daily/*.json',\n    DATA_SOURCE = 'cosmictracker_storage',\n    FORMAT = 'CSV',\n    FIELDTERMINATOR = '0x0b',\n    FIELDQUOTE = '0x0b'\n)\nWITH (\n    jsonContent VARCHAR(MAX)\n) AS rows;\n\n\n-- 1. Check if the container/folder exists\nSELECT *\nFROM sys.external_data_sources\nWHERE name = 'cosmictracker_storage';\n\n-- 2. List files in the directory (using OPENROWSET with wildcard)\nSELECT \n    filename() AS file_name,\n    filepath() AS file_path\nFROM OPENROWSET(\n    BULK 'source/daily/*.json',\n    DATA_SOURCE = 'cosmictracker_storage',\n    FORMAT = 'CSV',\n    FIELDTERMINATOR = '0x0b',\n    FIELDQUOTE = '0x0b'\n) WITH (dummy VARCHAR(1)) AS files;",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "cosmictracker_dw",
+				"poolName": "Built-in"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

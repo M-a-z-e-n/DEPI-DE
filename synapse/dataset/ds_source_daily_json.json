@@ -1,0 +1,29 @@
+{
+	"name": "ds_source_daily_json",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "synps-ws-neo-tracker-WorkspaceDefaultStorage",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"filename": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "Json",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": {
+					"value": "@dataset().fileName",
+					"type": "Expression"
+				},
+				"folderPath": "source/daily",
+				"fileSystem": "neotracker"
+			}
+		},
+		"schema": {}
+	},
+	"type": "Microsoft.Synapse/workspaces/datasets"
+}

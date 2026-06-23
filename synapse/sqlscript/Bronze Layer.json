@@ -1,0 +1,17 @@
+{
+	"name": "Bronze Layer",
+	"properties": {
+		"content": {
+			"query": "IF OBJECT_ID('bronze.neo_bronze') IS NOT NULL\n    DROP EXTERNAL TABLE bronze.neo_bronze;\n\nCREATE EXTERNAL TABLE bronze.neo_bronze\nWITH (\n    LOCATION = 'bronze/neo_bronze/',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = parquet_format\n) AS\nSELECT\n    TRY_CAST([date] AS DATE)                        AS approach_window_date,\n    neo_id,\n    neo_reference_id,\n    name,\n    TRY_CAST(absolute_magnitude_h AS FLOAT)          AS absolute_magnitude_h,\n    TRY_CAST(estimated_diameter_min_km AS FLOAT)     AS estimated_diameter_min_km,\n    TRY_CAST(estimated_diameter_max_km AS FLOAT)     AS estimated_diameter_max_km,\n    TRY_CAST(is_potentially_hazardous AS BIT)        AS is_potentially_hazardous,\n    TRY_CAST(is_sentry_object AS BIT)                AS is_sentry_object,\n    TRY_CAST(close_approach_date AS DATE)            AS close_approach_date,\n    close_approach_date_full,\n    TRY_CAST(relative_velocity_kph AS FLOAT)         AS relative_velocity_kph,\n    TRY_CAST(relative_velocity_kps AS FLOAT)         AS relative_velocity_kps,\n    TRY_CAST(miss_distance_km AS FLOAT)              AS miss_distance_km,\n    TRY_CAST(miss_distance_lunar AS FLOAT)           AS miss_distance_lunar,\n    TRY_CAST(miss_distance_au AS FLOAT)              AS miss_distance_au,\n    orbiting_body,\n    nasa_jpl_url,\n    GETDATE()                                        AS _ingested_at,\n    'neo_dataset.csv'                                AS _source_file\nFROM source.neo_raw;\n\nSELECT TOP 10 * FROM bronze.neo_bronze;",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "cosmictracker_dw",
+				"poolName": "Built-in"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}
