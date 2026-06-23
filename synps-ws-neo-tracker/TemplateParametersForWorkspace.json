@@ -1,0 +1,33 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"value": "synps-ws-neo-tracker"
+		},
+		"ls_cosmictracker_ondemand_password": {
+			"value": ""
+		},
+		"synps-ws-neo-tracker-WorkspaceDefaultSqlServer_connectionString": {
+			"value": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:synps-ws-neo-tracker.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"ExternalDataLake_properties_typeProperties_url": {
+			"value": "https://neotracker.dfs.core.windows.net/"
+		},
+		"ls_cosmictracker_ondemand_properties_typeProperties_server": {
+			"value": "synps-ws-neo-tracker-ondemand.sql.azuresynapse.net"
+		},
+		"ls_cosmictracker_ondemand_properties_typeProperties_database": {
+			"value": "cosmictracker_dw"
+		},
+		"ls_cosmictracker_ondemand_properties_typeProperties_userName": {
+			"value": "NEO_Tracker"
+		},
+		"ls_nasa_api_properties_typeProperties_url": {
+			"value": "https://api.nasa.gov"
+		},
+		"synps-ws-neo-tracker-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"value": "https://neotracker.dfs.core.windows.net"
+		}
+	}
+}

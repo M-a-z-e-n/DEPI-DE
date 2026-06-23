@@ -1,0 +1,882 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"type": "string",
+			"metadata": "Workspace name",
+			"defaultValue": "synps-ws-neo-tracker"
+		},
+		"ls_cosmictracker_ondemand_password": {
+			"type": "secureString",
+			"metadata": "Secure string for 'password' of 'ls_cosmictracker_ondemand'"
+		},
+		"synps-ws-neo-tracker-WorkspaceDefaultSqlServer_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'synps-ws-neo-tracker-WorkspaceDefaultSqlServer'",
+			"defaultValue": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:synps-ws-neo-tracker.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"ExternalDataLake_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://neotracker.dfs.core.windows.net/"
+		},
+		"ls_cosmictracker_ondemand_properties_typeProperties_server": {
+			"type": "string",
+			"defaultValue": "synps-ws-neo-tracker-ondemand.sql.azuresynapse.net"
+		},
+		"ls_cosmictracker_ondemand_properties_typeProperties_database": {
+			"type": "string",
+			"defaultValue": "cosmictracker_dw"
+		},
+		"ls_cosmictracker_ondemand_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "NEO_Tracker"
+		},
+		"ls_nasa_api_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://api.nasa.gov"
+		},
+		"synps-ws-neo-tracker-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://neotracker.dfs.core.windows.net"
+		}
+	},
+	"variables": {
+		"workspaceId": "[concat('Microsoft.Synapse/workspaces/', parameters('workspaceName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('workspaceName'), '/pl_cosmictracker_medallion')]",
+			"type": "Microsoft.Synapse/workspaces/pipelines",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"activities": [
+					{
+						"name": "Load Silver",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "Delete Silver Folder",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_cosmictracker_ondemand",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": "IF OBJECT_ID('silver.neo_silver') IS NOT NULL\n    DROP EXTERNAL TABLE silver.neo_silver;\n\nCREATE EXTERNAL TABLE silver.neo_silver\nWITH (\n    LOCATION = 'silver/neo_silver/',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = parquet_format\n) AS\nWITH deduped AS (\n    SELECT\n        *,\n        ROW_NUMBER() OVER (\n            PARTITION BY neo_id, close_approach_date\n            ORDER BY _ingested_at DESC\n        ) AS rn\n    FROM bronze.neo_bronze\n    WHERE neo_id IS NOT NULL\n      AND close_approach_date IS NOT NULL\n)\nSELECT\n    neo_id,\n    neo_reference_id,\n    name,\n    absolute_magnitude_h,\n    estimated_diameter_min_km,\n    estimated_diameter_max_km,\n    ROUND((estimated_diameter_min_km + estimated_diameter_max_km) / 2.0, 4) AS estimated_diameter_avg_km,\n    is_potentially_hazardous,\n    is_sentry_object,\n    close_approach_date,\n    relative_velocity_kph,\n    miss_distance_km,\n    miss_distance_lunar,\n    miss_distance_au,\n    orbiting_body,\n    nasa_jpl_url,\n    CASE\n        WHEN miss_distance_lunar < 1  THEN 'Very Close'\n        WHEN miss_distance_lunar < 10 THEN 'Close'\n        WHEN miss_distance_lunar < 50 THEN 'Moderate'\n        ELSE 'Distant'\n    END AS proximity_category\nFROM deduped\nWHERE rn = 1;"
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "Load Gold - Monthly Summary",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "Delete Gold Monthly Folder",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_cosmictracker_ondemand",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": "IF OBJECT_ID('gold.monthly_neo_summary') IS NOT NULL\n    DROP EXTERNAL TABLE gold.monthly_neo_summary;\n\nCREATE EXTERNAL TABLE gold.monthly_neo_summary\nWITH (\n    LOCATION = 'gold/monthly_neo_summary/',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = parquet_format\n) AS\nSELECT\n    YEAR(close_approach_date)  AS approach_year,\n    MONTH(close_approach_date) AS approach_month,\n    COUNT(DISTINCT neo_id)     AS unique_asteroids,\n    COUNT(*)                   AS total_approaches,\n    SUM(CASE WHEN is_potentially_hazardous = 1 THEN 1 ELSE 0 END) AS hazardous_approaches,\n    AVG(estimated_diameter_avg_km)   AS avg_diameter_km,\n    MIN(miss_distance_lunar)         AS closest_approach_lunar_distance,\n    AVG(relative_velocity_kph)       AS avg_velocity_kph\nFROM silver.neo_silver\nGROUP BY YEAR(close_approach_date), MONTH(close_approach_date);"
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "Load Gold - Hazardous Asteroids",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "Delete Gold Hazardous Folder",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_cosmictracker_ondemand",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": "IF OBJECT_ID('gold.hazardous_asteroids') IS NOT NULL\n    DROP EXTERNAL TABLE gold.hazardous_asteroids;\n\nCREATE EXTERNAL TABLE gold.hazardous_asteroids\nWITH (\n    LOCATION = 'gold/hazardous_asteroids/',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = parquet_format\n) AS\nSELECT\n    neo_id,\n    name,\n    close_approach_date,\n    estimated_diameter_avg_km,\n    miss_distance_lunar,\n    miss_distance_km,\n    relative_velocity_kph,\n    proximity_category,\n    orbiting_body\nFROM silver.neo_silver\nWHERE is_potentially_hazardous = 1\nORDER BY close_approach_date DESC;"
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "Set Run Date",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "RunDate",
+							"value": {
+								"value": "@formatDateTime(addDays(utcnow(), -1), 'yyyy-MM-dd')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set Run Date Compact",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Set Run Date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "RunDateCompact",
+							"value": {
+								"value": "@replace(variables('RunDate'), '-', '')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Get NASA API Key",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Set Run Date Compact",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"method": "GET",
+							"headers": {},
+							"url": "https://kv-cosmictracker.vault.azure.net/secrets/NasaApiKey?api-version=7.4",
+							"connectVia": {
+								"referenceName": "AutoResolveIntegrationRuntime",
+								"type": "IntegrationRuntimeReference"
+							},
+							"authentication": {
+								"type": "MSI",
+								"resource": "https://vault.azure.net"
+							}
+						}
+					},
+					{
+						"name": "Pull Daily NEO Data",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Get NASA API Key",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "RestSource",
+								"httpRequestTimeout": "00:01:40",
+								"requestInterval": "00.00:00:00.010",
+								"requestMethod": "GET",
+								"paginationRules": {
+									"supportRFC5988": "true"
+								}
+							},
+							"sink": {
+								"type": "JsonSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "JsonWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "ds_nasa_feed",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "ds_source_daily_json",
+								"type": "DatasetReference",
+								"parameters": {
+									"filename": {
+										"value": "neo_@{variables('RunDate')}.json",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					},
+					{
+						"name": "Flatten and Append to Bronze",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "Delete Stale Daily Folder",
+								"dependencyConditions": [
+									"Succeeded",
+									"Failed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_cosmictracker_ondemand",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "IF OBJECT_ID('bronze.stg_daily_@{variables('RunDateCompact')}') IS NOT NULL\n    DROP EXTERNAL TABLE bronze.stg_daily_@{variables('RunDateCompact')};\n\nCREATE EXTERNAL TABLE bronze.stg_daily_@{variables('RunDateCompact')}\nWITH (\n    LOCATION = 'bronze/neo_bronze/daily_@{variables('RunDateCompact')}/',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = parquet_format\n) AS\nSELECT\n    TRY_CAST(d.[key] AS DATE)                                   AS approach_window_date,\n    JSON_VALUE(neo.value, '$.id')                               AS neo_id,\n    JSON_VALUE(neo.value, '$.neo_reference_id')                 AS neo_reference_id,\n    JSON_VALUE(neo.value, '$.name')                             AS name,\n    TRY_CAST(JSON_VALUE(neo.value, '$.absolute_magnitude_h') AS FLOAT) AS absolute_magnitude_h,\n    TRY_CAST(JSON_VALUE(neo.value, '$.estimated_diameter.kilometers.estimated_diameter_min') AS FLOAT) AS estimated_diameter_min_km,\n    TRY_CAST(JSON_VALUE(neo.value, '$.estimated_diameter.kilometers.estimated_diameter_max') AS FLOAT) AS estimated_diameter_max_km,\n    TRY_CAST(JSON_VALUE(neo.value, '$.is_potentially_hazardous_asteroid') AS BIT) AS is_potentially_hazardous,\n    TRY_CAST(JSON_VALUE(neo.value, '$.is_sentry_object') AS BIT) AS is_sentry_object,\n    TRY_CAST(JSON_VALUE(ca.value, '$.close_approach_date') AS DATE)  AS close_approach_date,\n    JSON_VALUE(ca.value, '$.close_approach_date_full')          AS close_approach_date_full,\n    TRY_CAST(JSON_VALUE(ca.value, '$.relative_velocity.kilometers_per_hour') AS FLOAT)  AS relative_velocity_kph,\n    TRY_CAST(JSON_VALUE(ca.value, '$.relative_velocity.kilometers_per_second') AS FLOAT) AS relative_velocity_kps,\n    TRY_CAST(JSON_VALUE(ca.value, '$.miss_distance.kilometers') AS FLOAT)   AS miss_distance_km,\n    TRY_CAST(JSON_VALUE(ca.value, '$.miss_distance.lunar') AS FLOAT)        AS miss_distance_lunar,\n    TRY_CAST(JSON_VALUE(ca.value, '$.miss_distance.astronomical') AS FLOAT) AS miss_distance_au,\n    JSON_VALUE(ca.value, '$.orbiting_body')                     AS orbiting_body,\n    JSON_VALUE(neo.value, '$.nasa_jpl_url')                     AS nasa_jpl_url,\n    GETDATE()                                                   AS _ingested_at,\n    'neo_@{variables('RunDate')}.json'                          AS _source_file\nFROM (\n    SELECT jsonContent AS BulkColumn\n    FROM OPENROWSET(\n            BULK 'source/daily/neo_@{variables('RunDate')}.json',\n            DATA_SOURCE = 'cosmictracker_storage',\n            FORMAT = 'CSV',\n            FIELDTERMINATOR = '0x0b',\n            FIELDQUOTE = '0x0b'\n         ) WITH (jsonContent VARCHAR(MAX)) AS doc\n) AS doc\nCROSS APPLY OPENJSON(doc.BulkColumn, '$.near_earth_objects') AS d\nCROSS APPLY OPENJSON(d.value) AS neo\nCROSS APPLY OPENJSON(neo.value, '$.close_approach_data') AS ca\nWHERE ca.[key] = '0';\n\nDROP EXTERNAL TABLE bronze.stg_daily_@{variables('RunDateCompact')};",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "Delete Stale Daily Folder",
+						"type": "Delete",
+						"dependsOn": [
+							{
+								"activity": "Pull Daily NEO Data",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "Binary",
+								"type": "DatasetReference",
+								"parameters": {
+									"folderPath": {
+										"value": "bronze/neo_bronze/daily_@{replace(variables('RunDate'), '-', '')}",
+										"type": "Expression"
+									}
+								}
+							},
+							"enableLogging": false,
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"recursive": true,
+								"wildcardFileName": {
+									"value": "*",
+									"type": "Expression"
+								},
+								"enablePartitionDiscovery": false
+							}
+						}
+					},
+					{
+						"name": "Delete Silver Folder",
+						"type": "Delete",
+						"dependsOn": [
+							{
+								"activity": "Flatten and Append to Bronze",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "Binary",
+								"type": "DatasetReference",
+								"parameters": {
+									"folderPath": {
+										"value": "silver/neo_silver",
+										"type": "Expression"
+									}
+								}
+							},
+							"enableLogging": false,
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"recursive": true,
+								"enablePartitionDiscovery": false
+							}
+						}
+					},
+					{
+						"name": "Delete Gold Monthly Folder",
+						"type": "Delete",
+						"dependsOn": [
+							{
+								"activity": "Load Silver",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "Binary",
+								"type": "DatasetReference",
+								"parameters": {
+									"folderPath": {
+										"value": "gold/monthly_neo_summary",
+										"type": "Expression"
+									}
+								}
+							},
+							"enableLogging": false,
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"recursive": true,
+								"enablePartitionDiscovery": false
+							}
+						}
+					},
+					{
+						"name": "Delete Gold Hazardous Folder",
+						"type": "Delete",
+						"dependsOn": [
+							{
+								"activity": "Load Silver",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "Binary",
+								"type": "DatasetReference",
+								"parameters": {
+									"folderPath": {
+										"value": "gold/hazardous_asteroids",
+										"type": "Expression"
+									}
+								}
+							},
+							"enableLogging": false,
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"recursive": true,
+								"enablePartitionDiscovery": false
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"variables": {
+					"RunDate": {
+						"type": "String"
+					},
+					"RunDateCompact": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-06-23T06:12:26Z"
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/ls_cosmictracker_ondemand')]",
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]",
+				"[concat(variables('workspaceId'), '/datasets/ds_nasa_feed')]",
+				"[concat(variables('workspaceId'), '/datasets/ds_source_daily_json')]",
+				"[concat(variables('workspaceId'), '/datasets/Binary')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Binary')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "synps-ws-neo-tracker-WorkspaceDefaultStorage",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"folderPath": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": {
+							"value": "@dataset().folderPath",
+							"type": "Expression"
+						},
+						"fileSystem": "neotracker"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/synps-ws-neo-tracker-WorkspaceDefaultStorage')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ds_nasa_feed')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_nasa_api",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "RestResource",
+				"typeProperties": {
+					"relativeUrl": {
+						"value": "/neo/rest/v1/feed?start_date=@{variables('RunDate')}&end_date=@{variables('RunDate')}&api_key=@{activity('Get NASA API Key').output.value}",
+						"type": "Expression"
+					}
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/ls_nasa_api')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ds_source_daily_json')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "synps-ws-neo-tracker-WorkspaceDefaultStorage",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"filename": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@dataset().fileName",
+							"type": "Expression"
+						},
+						"folderPath": "source/daily",
+						"fileSystem": "neotracker"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/synps-ws-neo-tracker-WorkspaceDefaultStorage')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ExternalDataLake')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('ExternalDataLake_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ls_cosmictracker_ondemand')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"server": "[parameters('ls_cosmictracker_ondemand_properties_typeProperties_server')]",
+					"database": "[parameters('ls_cosmictracker_ondemand_properties_typeProperties_database')]",
+					"encrypt": "mandatory",
+					"trustServerCertificate": false,
+					"authenticationType": "SQL",
+					"userName": "[parameters('ls_cosmictracker_ondemand_properties_typeProperties_userName')]",
+					"password": {
+						"type": "SecureString",
+						"value": "[parameters('ls_cosmictracker_ondemand_password')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ls_nasa_api')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "RestService",
+				"typeProperties": {
+					"url": "[parameters('ls_nasa_api_properties_typeProperties_url')]",
+					"enableServerCertificateValidation": true,
+					"authenticationType": "Anonymous"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/synps-ws-neo-tracker-WorkspaceDefaultSqlServer')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"DBName": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"connectionString": "[parameters('synps-ws-neo-tracker-WorkspaceDefaultSqlServer_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/synps-ws-neo-tracker-WorkspaceDefaultStorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('synps-ws-neo-tracker-WorkspaceDefaultStorage_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Daily Trigger')]",
+			"type": "Microsoft.Synapse/workspaces/triggers",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"runtimeState": "Started",
+				"pipelines": [
+					{
+						"pipelineReference": {
+							"referenceName": "pl_cosmictracker_medallion",
+							"type": "PipelineReference"
+						},
+						"parameters": {}
+					}
+				],
+				"type": "ScheduleTrigger",
+				"typeProperties": {
+					"recurrence": {
+						"frequency": "Day",
+						"interval": 1,
+						"startTime": "2026-06-22T02:19:00",
+						"endTime": "2026-08-01T23:19:00",
+						"timeZone": "Egypt Standard Time"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/pipelines/pl_cosmictracker_medallion')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AutoResolveIntegrationRuntime')]",
+			"type": "Microsoft.Synapse/workspaces/integrationRuntimes",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "AutoResolve",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 0
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/WorkspaceSystemIdentity')]",
+			"type": "Microsoft.Synapse/workspaces/credentials",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "ManagedIdentity",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Bronze Layer')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "IF OBJECT_ID('bronze.neo_bronze') IS NOT NULL\n    DROP EXTERNAL TABLE bronze.neo_bronze;\n\nCREATE EXTERNAL TABLE bronze.neo_bronze\nWITH (\n    LOCATION = 'bronze/neo_bronze/',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = parquet_format\n) AS\nSELECT\n    TRY_CAST([date] AS DATE)                        AS approach_window_date,\n    neo_id,\n    neo_reference_id,\n    name,\n    TRY_CAST(absolute_magnitude_h AS FLOAT)          AS absolute_magnitude_h,\n    TRY_CAST(estimated_diameter_min_km AS FLOAT)     AS estimated_diameter_min_km,\n    TRY_CAST(estimated_diameter_max_km AS FLOAT)     AS estimated_diameter_max_km,\n    TRY_CAST(is_potentially_hazardous AS BIT)        AS is_potentially_hazardous,\n    TRY_CAST(is_sentry_object AS BIT)                AS is_sentry_object,\n    TRY_CAST(close_approach_date AS DATE)            AS close_approach_date,\n    close_approach_date_full,\n    TRY_CAST(relative_velocity_kph AS FLOAT)         AS relative_velocity_kph,\n    TRY_CAST(relative_velocity_kps AS FLOAT)         AS relative_velocity_kps,\n    TRY_CAST(miss_distance_km AS FLOAT)              AS miss_distance_km,\n    TRY_CAST(miss_distance_lunar AS FLOAT)           AS miss_distance_lunar,\n    TRY_CAST(miss_distance_au AS FLOAT)              AS miss_distance_au,\n    orbiting_body,\n    nasa_jpl_url,\n    GETDATE()                                        AS _ingested_at,\n    'neo_dataset.csv'                                AS _source_file\nFROM source.neo_raw;\n\nSELECT TOP 10 * FROM bronze.neo_bronze;",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "cosmictracker_dw",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Create Database')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "CREATE DATABASE cosmictracker_dw;\nGO\n\n---\n\nCREATE SCHEMA source;\nGO\nCREATE SCHEMA bronze;\nGO\nCREATE SCHEMA silver;\nGO\nCREATE SCHEMA gold;\nGO\n\n--- \nCREATE MASTER KEY\nENCRYPTION BY PASSWORD = 'StrongPassword@12345';\nGO\n\nCREATE DATABASE SCOPED CREDENTIAL WorkspaceIdentity\nWITH IDENTITY = 'Managed Identity';\nGO\n\n\nCREATE EXTERNAL DATA SOURCE cosmictracker_storage\nWITH (\n    LOCATION = 'https://neotracker.dfs.core.windows.net/neotracker',\n    CREDENTIAL = WorkspaceIdentity\n);\nGO\n\n--- \n\nCREATE EXTERNAL FILE FORMAT csv_format\nWITH (\n    FORMAT_TYPE = DELIMITEDTEXT,\n    FORMAT_OPTIONS (\n        FIELD_TERMINATOR = ',',\n        FIRST_ROW = 2,\n        USE_TYPE_DEFAULT = FALSE\n    )\n);\nGO\n\nCREATE EXTERNAL FILE FORMAT parquet_format\nWITH (\n    FORMAT_TYPE = PARQUET\n);\nGO\n\n--- \n\nCREATE EXTERNAL TABLE source.neo_raw (\n    [date]                       VARCHAR(20),\n    neo_id                       VARCHAR(50),\n    neo_reference_id             VARCHAR(50),\n    name                         VARCHAR(200),\n    absolute_magnitude_h         VARCHAR(50),\n    estimated_diameter_min_km    VARCHAR(50),\n    estimated_diameter_max_km    VARCHAR(50),\n    is_potentially_hazardous     VARCHAR(10),\n    is_sentry_object             VARCHAR(10),\n    close_approach_date          VARCHAR(20),\n    close_approach_date_full     VARCHAR(50),\n    relative_velocity_kph        VARCHAR(50),\n    relative_velocity_kps        VARCHAR(50),\n    miss_distance_km             VARCHAR(50),\n    miss_distance_lunar          VARCHAR(50),\n    miss_distance_au             VARCHAR(50),\n    orbiting_body                VARCHAR(50),\n    nasa_jpl_url                 VARCHAR(300)\n)\nWITH (\n    LOCATION = 'source/neo_dataset.csv',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = csv_format\n);\nGO\n\n--- \nSELECT TOP 10 * FROM OPENROWSET( BULK 'source/neo_dataset.csv', DATA_SOURCE = 'cosmictracker_storage', FORMAT = 'CSV', PARSER_VERSION = '2.0', HEADER_ROW = TRUE ) AS rows;\n\nSELECT TOP 10 * FROM source.neo_raw;\n---\n\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "cosmictracker_dw",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Gold Layer')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "IF OBJECT_ID('gold.monthly_neo_summary') IS NOT NULL\n    DROP EXTERNAL TABLE gold.monthly_neo_summary;\n\nCREATE EXTERNAL TABLE gold.monthly_neo_summary\nWITH (\n    LOCATION = 'gold/monthly_neo_summary/',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = parquet_format\n) AS\nSELECT\n    YEAR(close_approach_date)  AS approach_year,\n    MONTH(close_approach_date) AS approach_month,\n    COUNT(DISTINCT neo_id)     AS unique_asteroids,\n    COUNT(*)                   AS total_approaches,\n    SUM(CASE WHEN is_potentially_hazardous = 1 THEN 1 ELSE 0 END) AS hazardous_approaches,\n    AVG(estimated_diameter_avg_km)   AS avg_diameter_km,\n    MIN(miss_distance_lunar)         AS closest_approach_lunar_distance,\n    AVG(relative_velocity_kph)       AS avg_velocity_kph\nFROM silver.neo_silver\nGROUP BY YEAR(close_approach_date), MONTH(close_approach_date);\n\nSELECT TOP 10 * FROM gold.monthly_neo_summary;\n\n\n----- \n\n\nIF OBJECT_ID('gold.hazardous_asteroids') IS NOT NULL\n    DROP EXTERNAL TABLE gold.hazardous_asteroids;\n\nCREATE EXTERNAL TABLE gold.hazardous_asteroids\nWITH (\n    LOCATION = 'gold/hazardous_asteroids/',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = parquet_format\n) AS\nSELECT\n    neo_id,\n    name,\n    close_approach_date,\n    estimated_diameter_avg_km,\n    miss_distance_lunar,\n    miss_distance_km,\n    relative_velocity_kph,\n    proximity_category,\n    orbiting_body\nFROM silver.neo_silver\nWHERE is_potentially_hazardous = 1\nORDER BY close_approach_date DESC;\n\nSELECT TOP 10 * FROM gold.hazardous_asteroids;",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "cosmictracker_dw",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/SQL script 1')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "CREATE USER [synps-ws-neo-tracker] FROM EXTERNAL PROVIDER;\nGO\n\nALTER ROLE db_datareader ADD MEMBER [synps-ws-neo-tracker];\nGO\n\nALTER ROLE db_datawriter ADD MEMBER [synps-ws-neo-tracker];\nGO\n\n------ \n\nCREATE USER [synps-ws-neo-tracker] FROM EXTERNAL PROVIDER;\nGO\n\nALTER ROLE db_owner ADD MEMBER [synps-ws-neo-tracker];\nGO\n\n---\n\nSELECT name, type_desc, authentication_type_desc\nFROM sys.database_principals\nWHERE name = 'synps-ws-neo-tracker';\n\n\nSELECT TOP 5 *\nFROM OPENROWSET(\n    BULK 'source/daily/neo_2026-06-21.json',\n    DATA_SOURCE = 'cosmictracker_storage',\n    SINGLE_CLOB\n) AS doc;\n\nSELECT name, location FROM sys.external_data_sources;\n\nSELECT TOP 1 BulkColumn\nFROM OPENROWSET(\n    BULK 'source/daily/neo_2026-06-20.json',\n    DATA_SOURCE = 'cosmictracker_storage',\n    SINGLE_CLOB\n) AS doc;\n\nSELECT name, location\nFROM sys.external_data_sources;\n\nSELECT *\nFROM sys.database_scoped_credentials;\n\nSELECT *\nFROM OPENROWSET(\n    BULK 'source/daily/*.json',\n    DATA_SOURCE = 'cosmictracker_storage',\n    FORMAT = 'CSV',\n    FIELDTERMINATOR = '0x0b',\n    FIELDQUOTE = '0x0b'\n)\nWITH (\n    jsonContent VARCHAR(MAX)\n) AS rows;\n\n\nSELECT TOP 1 LEFT(jsonContent, 500)\nFROM OPENROWSET(\n    BULK 'source/daily/*.json',\n    DATA_SOURCE = 'cosmictracker_storage',\n    FORMAT = 'CSV',\n    FIELDTERMINATOR = '0x0b',\n    FIELDQUOTE = '0x0b'\n)\nWITH (\n    jsonContent VARCHAR(MAX)\n) AS rows;\n\n\n-- 1. Check if the container/folder exists\nSELECT *\nFROM sys.external_data_sources\nWHERE name = 'cosmictracker_storage';\n\n-- 2. List files in the directory (using OPENROWSET with wildcard)\nSELECT \n    filename() AS file_name,\n    filepath() AS file_path\nFROM OPENROWSET(\n    BULK 'source/daily/*.json',\n    DATA_SOURCE = 'cosmictracker_storage',\n    FORMAT = 'CSV',\n    FIELDTERMINATOR = '0x0b',\n    FIELDQUOTE = '0x0b'\n) WITH (dummy VARCHAR(1)) AS files;",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "cosmictracker_dw",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/SQL script 2')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "SELECT TOP 10 *\nFROM gold.hazardous_asteroids\nORDER BY close_approach_date DESC;\n\nSELECT TOP 10 *\nFROM gold.monthly_neo_summary\nORDER BY approach_year DESC, approach_month DESC;\n\nSELECT COUNT(*) AS total_rows FROM silver.neo_silver;\n\nSELECT COUNT(*) AS total_rows FROM gold.hazardous_asteroids;\n\nSELECT COUNT(*) AS total_rows FROM gold.monthly_neo_summary;",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "cosmictracker_dw",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Silver Layer')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "IF OBJECT_ID('silver.neo_silver') IS NOT NULL\n    DROP EXTERNAL TABLE silver.neo_silver;\n\nCREATE EXTERNAL TABLE silver.neo_silver\nWITH (\n    LOCATION = 'silver/neo_silver/',\n    DATA_SOURCE = cosmictracker_storage,\n    FILE_FORMAT = parquet_format\n) AS\nWITH deduped AS (\n    SELECT\n        *,\n        ROW_NUMBER() OVER (\n            PARTITION BY neo_id, close_approach_date\n            ORDER BY _ingested_at DESC\n        ) AS rn\n    FROM bronze.neo_bronze\n    WHERE neo_id IS NOT NULL\n      AND close_approach_date IS NOT NULL\n)\nSELECT\n    neo_id,\n    neo_reference_id,\n    name,\n    absolute_magnitude_h,\n    estimated_diameter_min_km,\n    estimated_diameter_max_km,\n    ROUND((estimated_diameter_min_km + estimated_diameter_max_km) / 2.0, 4) AS estimated_diameter_avg_km,\n    is_potentially_hazardous,\n    is_sentry_object,\n    close_approach_date,\n    relative_velocity_kph,\n    miss_distance_km,\n    miss_distance_lunar,\n    miss_distance_au,\n    orbiting_body,\n    nasa_jpl_url,\n    CASE\n        WHEN miss_distance_lunar < 1  THEN 'Very Close'\n        WHEN miss_distance_lunar < 10 THEN 'Close'\n        WHEN miss_distance_lunar < 50 THEN 'Moderate'\n        ELSE 'Distant'\n    END AS proximity_category\nFROM deduped\nWHERE rn = 1;\n\nSELECT TOP 10 * FROM silver.neo_silver;",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "cosmictracker_dw",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		}
+	]
+}
