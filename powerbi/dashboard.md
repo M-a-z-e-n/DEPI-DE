@@ -11,7 +11,7 @@
 ##  Dashboard Preview
 
 ### Overview Page — Asteroid Watch
-![Asteroid Watch Overview](./screenshots/dashboard_overview.jpg)
+<img width="1380" height="734" alt="PBIDesktop_u3027CXdF5" src="https://github.com/user-attachments/assets/1fdb2674-2cf7-4475-9648-64ede0a96a5b" />
 
 **Key metrics displayed:**
 -  **1,204** Total Detected Threats
@@ -26,7 +26,7 @@
 ---
 
 ### Detail Page — Comprehensive Near-Earth Object Watchlist
-![NEO Watchlist](./screenshots/dashboard_watchlist.jpg)
+<img width="1322" height="735" alt="PBIDesktop_afjxGnipIB" src="https://github.com/user-attachments/assets/dfe7b13f-c6f8-4eb6-aecc-301c977e79a0" />
 
 **Interactive filters:**
 - Proximity Category (Close / Distant / Moderate)
