@@ -301,6 +301,11 @@ DEPI-DE/
 │
 ├── powerbi/
 │   └── dashboard.md
+|
+├── scripts/
+│   ├── README.md
+│   ├── step1_fetch_historical.py
+│   └── step2_build_dataset.py
 │
 └── synapse/
     ├── credential/
