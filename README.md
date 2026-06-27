@@ -368,21 +368,80 @@ NASA_API_KEY=your_nasa_api_key_here
 
 ---
 
-## 🤖 ML Model
+## 🤖 Machine Learning Model
 
-> 🚧 *<img width="1905" height="892" alt="image" src="https://github.com/user-attachments/assets/de7a8550-16cc-4a4b-a206-107a4a43da7b" />
-.*
+### Model Information
 
-<!-- Add the following when ready:
-- Model objective (e.g. hazard classification, miss distance prediction)
-- Algorithm used
-- Features / target variable
-- Training dataset details
-- Model performance metrics (accuracy, F1, RMSE, etc.)
-- How the model integrates with the pipeline
-- Inference results or predictions
--->
+| Item | Details |
+|------|---------|
+| Algorithm | Random Forest Classifier |
+| Task | Binary Classification |
+| Target | Hazardous Asteroid (Yes / No) |
+| Dataset | NASA Near-Earth Object Dataset |
+| Deployment | Streamlit |
 
+---
+
+### Features Used
+
+- Absolute Magnitude (H)
+- Estimated Diameter Min (km)
+- Estimated Diameter Max (km)
+- Relative Velocity (km/h)
+- Miss Distance (km)
+- Sentry Object
+
+---
+
+### Model Workflow
+
+1. Load trained model.
+2. Load scaler.
+3. Receive user inputs.
+4. Scale input features.
+5. Predict hazard class.
+6. Display prediction probability.
+7. Show safety assessment.
+
+---
+
+### User Interface
+
+#### Input Form
+
+<p align="center">
+<img width="900" src="https://github.com/user-attachments/assets/de7a8550-16cc-4a4b-a206-107a4a43da7b">
+</p>
+
+---
+
+#### Prediction Result
+
+<p align="center">
+<img width="900" src="https://github.com/user-attachments/assets/70aee3f3-cd47-4c27-aa89-714ca6a90266">
+</p>
+
+---
+
+### Prediction Output
+
+The application displays:
+
+- Hazard Classification
+- Prediction Probability
+- Safety Assessment
+
+---
+
+### Technologies
+
+- Python
+- Streamlit
+- Scikit-learn
+- Pandas
+- NumPy
+- Joblib
+- CSS
 ---
 
 ## 📊 Power BI Dashboard
