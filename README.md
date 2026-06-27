@@ -405,10 +405,11 @@ NASA_API_KEY=your_nasa_api_key_here
 | Name | Role |
 |---|---|
 | Abdullah Fathy | Team Leader & Pipeline Architect |
-| <!-- Team Member 2 --> | <!-- Role --> |
+| Mazen Moustafa | Dashboard Creation |
 | <!-- Team Member 3 --> | <!-- Role --> |
 | <!-- Team Member 4 --> | <!-- Role --> |
 | <!-- Team Member 5 --> | <!-- Role --> |
+| <!-- Team Member 6 --> | <!-- Role --> |
 
 ---
 
