@@ -370,7 +370,8 @@ NASA_API_KEY=your_nasa_api_key_here
 
 ## 🤖 ML Model
 
-> 🚧 *This section will be completed once the ML model is finalized.*
+> 🚧 *<img width="1905" height="892" alt="image" src="https://github.com/user-attachments/assets/de7a8550-16cc-4a4b-a206-107a4a43da7b" />
+.*
 
 <!-- Add the following when ready:
 - Model objective (e.g. hazard classification, miss distance prediction)
