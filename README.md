@@ -50,23 +50,23 @@ CosmicTracker is a production-grade data engineering project that tracks Near-Ea
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        DATA SOURCES                              │
-│              NASA NeoWs API (api.nasa.gov)                       │
+│                        DATA SOURCES                             │
+│              NASA NeoWs API (api.nasa.gov)                      │
 └───────────────────────────┬─────────────────────────────────────┘
                             │ REST API (daily, 7-day chunks)
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    INGESTION LAYER                                │
-│         Python Scripts / Synapse Copy Activity                   │
+│                    INGESTION LAYER                              │
+│         Python Scripts / Synapse Copy Activity                  │
 │   step1_fetch_historical.py  │  step2_build_dataset.py          │
 └───────────────────────────┬─────────────────────────────────────┘
                             │ Raw JSON / CSV
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│               AZURE DATA LAKE STORAGE GEN2                       │
-│                   (neotracker container)                         │
-│                                                                  │
-│  source/          bronze/          silver/         gold/         │
+│               AZURE DATA LAKE STORAGE GEN2                      │
+│                   (neotracker container)                        │
+│                                                                 │
+│  source/          bronze/          silver/         gold/        │
 │  ├─ *.csv         ├─ neo_bronze/   ├─ neo_silver/  ├─ monthly/  │
 │  └─ daily/        │  ├─ *.parquet  │  └─ *.parquet └─ hazard/   │
 │     └─ *.json     │  └─ daily_*/   │                            │
@@ -74,23 +74,23 @@ CosmicTracker is a production-grade data engineering project that tracks Near-Ea
                     │                │
                     ▼                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│              AZURE SYNAPSE ANALYTICS                             │
-│              (Serverless SQL Pool)                               │
-│                                                                  │
-│   Database: cosmictracker_dw                                     │
-│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-│   │  source  │→ │  bronze  │→ │  silver  │→ │   gold   │      │
-│   │  schema  │  │  schema  │  │  schema  │  │  schema  │      │
-│   └──────────┘  └──────────┘  └──────────┘  └──────────┘      │
-│                                                                  │
+│              AZURE SYNAPSE ANALYTICS                            │
+│              (Serverless SQL Pool)                              │
+│                                                                 │
+│   Database: cosmictracker_dw                                    │
+│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
+│   │  source  │→ │  bronze  │→ │  silver  │→ │   gold   │        │
+│   │  schema  │  │  schema  │  │  schema  │  │  schema  │        │
+│   └──────────┘  └──────────┘  └──────────┘  └──────────┘        │
+│                                                                 │
 │   Pipeline: pl_cosmictracker_medallion (daily trigger)          │
 └───────────────────────────┬─────────────────────────────────────┘
                             │ Serverless SQL endpoint
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    PRESENTATION LAYER                            │
-│                  Power BI Dashboard                              │
-│            "Asteroid Watch" — gold schema                        │
+│                    PRESENTATION LAYER                           │
+│                  Power BI Dashboard                             │
+│            "Asteroid Watch" — gold schema                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -208,31 +208,27 @@ Two business-ready aggregated tables:
 
 > 📌 *Screenshot: pl_cosmictracker_medallion pipeline canvas*
 
-```
-<img width="1798" height="248" alt="msedge_42cZgIh4p1" src="https://github.com/user-attachments/assets/61ed27cf-934c-47a0-90ab-4ff74ca4f579" />
-```
+<img width="1798" height="248" alt="msedge_42cZgIh4p1" src="https://github.com/user-attachments/assets/2fc817bf-c9be-42ed-b67b-8705bafbe2e2" />
+
 
 ### Pipeline Run — Successful Execution
 
 > 📌 *Screenshot: All activities green after a successful daily run*
 
-```
 <img width="1792" height="897" alt="msedge_BZ3JYwEjuZ" src="https://github.com/user-attachments/assets/2d2663c7-b134-4cba-95f0-36912b04c259" />
-```
+
 
 ### ADLS Gen2 — Folder Structure
 > 📌 *Screenshot: neotracker container folder structure*
 
-```
 <img width="1549" height="381" alt="image" src="https://github.com/user-attachments/assets/21a6cb70-01aa-471c-8986-959519754c9c" />
-```
+
 
 ### Synapse SQL — Gold Layer Query Results
 > 📌 *Screenshot: Gold layer query results in Synapse Studio*
 
-```
 <img width="1910" height="915" alt="image" src="https://github.com/user-attachments/assets/de3e4454-1d8f-47a1-8372-b0806e639f9a" />
-```
+
 
 ---
 
@@ -293,26 +289,27 @@ proximity_category        VARCHAR  ← derived
 
 ```
 DEPI-DE/
-│
-├── scripts/
-│   ├── step1_fetch_historical.py     # Fetches 6 years of NASA data
-│   └── step2_build_dataset.py        # Combines JSON chunks into CSV
-│
-├── sql/
-│   ├── 00_setup.sql                  # Database, schemas, credentials
-│   ├── 01_source_table.sql           # External table over raw CSV
-│   ├── 02_bronze.sql                 # Bronze CETAS script
-│   ├── 03_silver.sql                 # Silver dedup + enrichment
-│   └── 04_gold.sql                   # Gold aggregations
+├── ML_AND_DEPLOYMENT/
+│   ├── .gitignore
+│   ├── DEADLOCK.CSS
+│   ├── app.py
+│   ├── neo_dataset.csv
+│   ├── neo_random_forest_model.pkl
+│   ├── neo_scaler.pkl
+│   ├── readme.md
+│   └── requirements.txt
 │
 ├── powerbi/
-│   ├── README.md                     # Dashboard documentation
-│   └── screenshots/
-│       ├── dashboard_overview.jpg
-│       └── dashboard_watchlist.jpg
+│   └── dashboard.md
 │
-├── .env.example                      # Environment variable template
-├── .gitignore
+└── synapse/
+    ├── credential/
+    ├── dataset/
+    ├── integrationRuntime/
+    ├── linkedService/
+    ├── pipeline/
+    ├── sqlscript/
+    └── trigger/
 └── README.md                         # This file
 ```
 
