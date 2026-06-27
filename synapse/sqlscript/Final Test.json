@@ -1,0 +1,17 @@
+{
+	"name": "Final Test",
+	"properties": {
+		"content": {
+			"query": "SELECT * FROM gold.hazardous_asteroids;",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "cosmictracker_dw",
+				"poolName": "Built-in"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}
