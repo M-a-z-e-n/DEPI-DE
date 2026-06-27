@@ -466,7 +466,7 @@ The application displays:
 |---|---|
 | Abdullah Fathy | Team Leader & Pipeline Architect |
 | Mazen Moustafa | Dashboard Creation |
-| YARA WALID  | ML | DS | Deployment |
+| YARA WALID  | ML, DS & Deployment |
 | <!-- Team Member 4 --> | <!-- Role --> |
 | <!-- Team Member 5 --> | <!-- Role --> |
 | <!-- Team Member 6 --> | <!-- Role --> |
