@@ -469,7 +469,7 @@ The application displays:
 | YARA WALID  | ML, DS & Deployment |
 | youssef mohammed zhiry | streaming engineer |
 | Sara Fathy Fathy | Data Ingestion |
-| <!-- Team Member 6 --> | <!-- Role --> |
+| Victor Ameer Fahmy | Data Warehouse |
 
 ---
 
